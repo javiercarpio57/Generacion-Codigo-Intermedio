@@ -32,8 +32,8 @@ class GeneracionCodigoPrinter(DecafListener):
 
         self.sizes = {
             self.INT: 4,
-            self.BOOLEAN: 2,
-            self.STRING: 1
+            self.STRING: 2,
+            self.BOOLEAN: 1
         }
 
         self.ambitos = []
@@ -43,6 +43,8 @@ class GeneracionCodigoPrinter(DecafListener):
         self.tabla_methods = TablaMetodos()
         self.tabla_struct = TablaStruct()
         self.tabla_parameters = TablaParametros()
+
+        self.codigogenerado = []
         
         self.node_type = {}
         self.node_code = {}
@@ -72,10 +74,12 @@ class GeneracionCodigoPrinter(DecafListener):
             control = f'INST_{self.inst}'
             return control
 
-    def TopGet(self, id):
+    def TopGet(self, id, offset_required = None):
         variable = self.current_scope.LookUp(id)
         if variable != 0:
             offset = variable['Offset']
+            if offset_required:
+                offset = offset_required
                 
             addr = f'L[{offset}]'
             return addr
@@ -83,6 +87,8 @@ class GeneracionCodigoPrinter(DecafListener):
         elif self.Find(id) != 0:
             variable = self.Find(id)
             offset = variable['Offset']
+            if offset_required:
+                offset = offset_required
             addr = f'G[{offset}]'
             return addr
 
@@ -167,8 +173,10 @@ class GeneracionCodigoPrinter(DecafListener):
         salida = f'EXIT DEF {method}'
         block = self.node_code[ctx.block()]
         code = [entrada] + ['\t' + x for x in block['code']] + [salida]
-        for c in code:
-            print(c)
+
+        self.node_code[ctx] = {
+            'code': code
+        }
 
     def enterVardeclr(self, ctx: DecafParser.VardeclrContext):
         tipo = ctx.var_type().getText()
@@ -306,51 +314,56 @@ class GeneracionCodigoPrinter(DecafListener):
         self.node_code[ctx] = codigo
 
         
+    def enterArray_id(self, ctx: DecafParser.Array_idContext):
+        parent = ctx.parentCtx
+        if parent in self.node_type.keys():
+            self.node_type[ctx] = self.node_type[parent]
 
-    # def enterArray_id(self, ctx: DecafParser.Array_idContext):
-    #     parent = ctx.parentCtx
-    #     if parent in self.node_type.keys():
-    #         self.node_type[ctx] = self.node_type[parent]
+    def exitArray_id(self, ctx: DecafParser.Array_idContext):
+        parent = ctx.parentCtx
+        if parent in self.node_type.keys() or ctx in self.node_type.keys():
+            return
 
-    # def exitArray_id(self, ctx: DecafParser.Array_idContext):
-    #     parent = ctx.parentCtx
-    #     if parent in self.node_type.keys() or ctx in self.node_type.keys():
-    #         return
+        id = ctx.getChild(0).getText()
+        variable = self.Find(id)
+        tipo = variable['Tipo']
+        offset = variable['Offset']
+        if ctx.int_literal() is not None:
+            if 'array' in tipo:
+                if tipo.split('array')[-1] in [self.INT, self.STRING, self.BOOLEAN]:
+                    self.node_type[ctx] = self.data_type[tipo.split('array')[-1]]
+                else:
+                    self.node_type[ctx] = self.VOID
+        elif ctx.var_id() is not None:
+            tipo = variable['Tipo']
+            tipo_var = self.Find(ctx.var_id().getText())
+            self.CheckErrorInArrayId(ctx, tipo, tipo_var)
 
-    #     id = ctx.getChild(0).getText()
-    #     variable = self.Find(id)
-    #     if variable == 0:
-    #         line = ctx.start.line
-    #         col = ctx.start.column
-    #         self.errores.Add(line, col, f'Variable "{id}" no ha sido declarada previamente.')
-    #         self.node_type[ctx] = self.ERROR
-    #     else:
-    #         tipo = variable['Tipo']
-    #         if ctx.int_literal() is not None:
-    #             if 'array' in tipo:
-    #                 if tipo.split('array')[-1] in [self.INT, self.STRING, self.BOOLEAN]:
-    #                     self.node_type[ctx] = self.data_type[tipo.split('array')[-1]]
-    #                 else:
-    #                     self.node_type[ctx] = self.VOID
-    #             else:
-    #                 line = ctx.start.line
-    #                 col = ctx.start.column
-    #                 self.errores.Add(line, col, f'Variable "{id}" debe ser un array.')
-    #                 self.node_type[ctx] = self.ERROR
-    #         elif ctx.var_id() is not None:
-    #             tipo = variable['Tipo']
-    #             tipo_var = self.Find(ctx.var_id().getText())
-    #             self.CheckErrorInArrayId(ctx, tipo, tipo_var)
+        temp = self.newTemp()
+        temp2 = self.newTemp()
+        tipo_real = tipo.split('array')[-1]
+        size = self.sizes[tipo_real]
 
-    # def exitVar_type(self, ctx: DecafParser.Var_typeContext):
-    #     self.node_type[ctx] = self.VOID
+        addr_viejo = self.node_code[ctx.getChild(2)]['addr']
+        code = self.node_code[ctx.getChild(2)]['code'] + \
+            [f'{temp} = {size} * {addr_viejo}'] + \
+            [f'{temp2} = {temp} + {offset}']
 
-    # def exitField_var(self, ctx: DecafParser.Field_varContext):
-    #     if ctx not in self.node_type.keys():
-    #         if ctx.var_id() is not None:
-    #             self.node_type[ctx] = self.node_type[ctx.getChild(0)]
-    #         elif ctx.array_id() is not None:
-    #             self.node_type[ctx] = self.node_type[ctx.getChild(0)]
+        self.node_code[ctx] = {
+            'code': code,
+            'addr': temp2
+        }
+        
+
+    def exitVar_type(self, ctx: DecafParser.Var_typeContext):
+        self.node_type[ctx] = self.VOID
+
+    def exitField_var(self, ctx: DecafParser.Field_varContext):
+        if ctx not in self.node_type.keys():
+            if ctx.var_id() is not None:
+                self.node_type[ctx] = self.node_type[ctx.getChild(0)]
+            elif ctx.array_id() is not None:
+                self.node_type[ctx] = self.node_type[ctx.getChild(0)]
 
     # def enterField_declr(self, ctx: DecafParser.Field_declrContext):
     #     tipo = ctx.var_type().getText()
@@ -427,7 +440,7 @@ class GeneracionCodigoPrinter(DecafListener):
         #         code += [self.node_code[statements[0]]['next']]
         # else:
         for i in range(len(statements)):
-            print('EXIT BLOCK', self.node_code[statements[i]])
+            # print('EXIT BLOCK', self.node_code[statements[i]])
             code += self.node_code[statements[i]]['code']
             # print(i, len(statements) - 1)
             # if i < len(statements) - 1:
@@ -454,54 +467,41 @@ class GeneracionCodigoPrinter(DecafListener):
         if self.all_equal(filtered):
             self.node_type[ctx] = filtered.pop()
 
-    # def exitMethod_call(self, ctx: DecafParser.Method_callContext):
-    #     name = ctx.method_name().getText()
-    #     parameters = []
+    def exitMethod_call(self, ctx: DecafParser.Method_callContext):
+        name = ctx.method_name().getText()
+        parameters = []
 
-    #     for child in ctx.children:
-    #         if isinstance(child, DecafParser.ExprContext):
-    #             parameters.append(child)
+        for child in ctx.children:
+            if isinstance(child, DecafParser.ExprContext):
+                parameters.append(child)
 
-    #     method_info = self.tabla_methods.LookUp(name)
-    #     if method_info == 0:
-    #         self.node_type[ctx] = self.ERROR
-    #         line = ctx.method_name().start.line
-    #         col = ctx.method_name().start.column
-    #         self.errores.Add(line, col, f'El método "{name}" no existe o no hay definición del método previamente a ser invocado.')
-    #         return
+        method_info = self.tabla_methods.LookUp(name)
+        code = f'CALL {name}, '
+        if len(parameters) == 0:
+            code += str(0)
+            self.node_type[ctx] = method_info['Tipo']
+            self.node_code[ctx] = {
+                'code': [code],
+                'addr': 'R'
+            }
+            return
 
-    #     if len(parameters) != len(method_info['Parameters']):
-    #         self.node_type[ctx] = self.ERROR
-    #         line = ctx.method_name().start.line
-    #         col = ctx.method_name().start.column
-    #         self.errores.Add(line, col, self.errores.NUMERO_PARAMETROS_METODO)
-    #         return
+        hasError = False
+        # print('PARAMETER', parameters)
+        parameter_code = []
+        for i in range(len(parameters)):
+            param = self.node_code[parameters[i]]['addr']
+            parameter_code += [f'PARAM {param}']
+            tipo_parametro = self.node_type[parameters[i]]
+            tipo_metodo = method_info['Parameters'][i]['Tipo']
 
-    #     if len(parameters) == 0:
-    #         self.node_type[ctx] = method_info['Tipo']
-    #         return
+            self.node_type[ctx] = method_info['Tipo']
 
-    #     hasError = False
-    #     for i in range(len(parameters)):
-    #         tipo_parametro = self.node_type[parameters[i]]
-    #         if tipo_parametro == self.ERROR:
-    #             self.node_type[ctx] = self.ERROR
-    #             return
-
-    #         tipo_metodo = method_info['Parameters'][i]['Tipo']
-
-    #         if tipo_parametro != tipo_metodo:
-    #             hasError = True
-
-    #             line = parameters[i].start.line
-    #             col = parameters[i].start.column
-    #             self.errores.Add(line, col, self.errores.TIPO_PARAMETROS_METODO)
-
-    #         if hasError:
-    #             self.node_type[ctx] = self.ERROR
-    #         else:
-    #             self.node_type[ctx] = method_info['Tipo']
-
+        code += str(len(parameters))
+        self.node_code[ctx] = {
+            'code': parameter_code + [code],
+            'addr': 'R'
+        }
     # def GetMethodType(self, ctx):
     #     nodo = ctx.parentCtx
     #     hijos = [str(type(i)) for i in nodo.children if not isinstance(i, TerminalNode)]
@@ -573,21 +573,22 @@ class GeneracionCodigoPrinter(DecafListener):
             'next': siguiente
         }
 
-    # def exitStatement_return(self, ctx: DecafParser.Statement_returnContext):
-    #     error = self.ChildrenHasError(ctx)
-    #     if error:
-    #         self.node_type[ctx] = self.ERROR
-    #         return
+    def exitStatement_return(self, ctx: DecafParser.Statement_returnContext):
+        self.node_type[ctx] = self.node_type[ctx.expr()]
 
-    #     self.node_type[ctx] = self.node_type[ctx.expr()]
+        print('RETURN', self.node_code[ctx.expr()])
+        # topget = self.TopGet()
+        addr = self.node_code[ctx.expr()]['addr']
+        code = self.node_code[ctx.expr()]['code'] + [f'RETURN {addr}']
+        self.node_code[ctx] = {
+            'code': code
+        }
 
-    # def exitStatement_methodcall(self, ctx: DecafParser.Statement_methodcallContext):
-    #     error = self.ChildrenHasError(ctx)
-    #     if error:
-    #         self.node_type[ctx] = self.ERROR
-    #         return
 
-    #     self.node_type[ctx] = self.node_type[ctx.method_call()]
+    def exitStatement_methodcall(self, ctx: DecafParser.Statement_methodcallContext):
+        self.node_type[ctx] = self.node_type[ctx.method_call()]
+        self.node_code[ctx] = self.node_code[ctx.method_call()]
+        
 
     # def exitStatement_break(self, ctx: DecafParser.Statement_breakContext):
     #     error = self.ChildrenHasError(ctx)
@@ -608,13 +609,24 @@ class GeneracionCodigoPrinter(DecafListener):
         if left.var_id():
             id = left.var_id().getText()
             topget = self.TopGet(id)
+            print('ASSIGN', E)
             code = E['code'] + [topget + ' = ' + E['addr']]
             self.node_code[ctx] = {
                 'code': code,
                 'addr': ''
             }
         elif left.array_id():
-            print('array id')
+            id = left.array_id().ID().getText()
+            topget = self.TopGet(id, self.node_code[left]['addr'])
+            addr = E['addr']
+            
+            code = self.node_code[left]['code'] + E['code'] + \
+                [f'{topget} = {addr}']
+                
+            self.node_code[ctx] = {
+                'code': code,
+                'addr': ''
+            }   
 
     def enterExpr(self, ctx: DecafParser.ExprContext):
         if ctx in self.node_code.keys():
@@ -672,6 +684,7 @@ class GeneracionCodigoPrinter(DecafListener):
                 # self.node_code[parent]['false'] = self.node_code[parent]['true']
                 # self.node_code[parent]['true'] = falso
             else:
+                print('EXIT EXPR', self.node_code[non_terminal])
                 self.node_code[ctx] = self.node_code[non_terminal]
         # elif len(nodes_nonterminals) == 0:
         #     self.node_type[ctx] = self.VOID
@@ -981,29 +994,48 @@ class GeneracionCodigoPrinter(DecafListener):
             # tipo_nodo = self.tabla_tipos.LookUp(tipo_id['Tipo'])
 
             # HIJO DERECHO
-                if ctx.array_id().var_id() is not None:
-                    tipo = tipo_id['Tipo']
-                    tipo_var = self.Find(ctx.array_id().var_id().getText())
-                    self.CheckErrorInArrayId(ctx.array_id(), tipo, tipo_var)
+                # if ctx.array_id().var_id() is not None:
+                #     tipo = tipo_id['Tipo']
+                #     tipo_var = self.Find(ctx.array_id().var_id().getText())
+                #     self.CheckErrorInArrayId(ctx.array_id(), tipo, tipo_var)
+                # elif ctx.array_id().expr() is not None:
+                #     print('TIPO ARRAY', tipo_id)
+                #     tipo = tipo_id['Tipo']
+                #     tipo_var = self.Find(ctx.array_id().var_id().getText())
+                #     self.CheckErrorInArrayId(ctx.array_id(), tipo, tipo_var)
 
 
                 print('------------ LOCATION SALIDA -------------------', result_type)
 
     def exitLocation(self, ctx: DecafParser.LocationContext):
-        if ctx not in self.node_type.keys():
-            self.node_type[ctx] = self.node_type[ctx.getChild(0)]
+        try:
+            if ctx not in self.node_type.keys():
+                self.node_type[ctx] = self.node_type[ctx.getChild(0)]
+        except:
+            print('hubo clavo')
+            self.node_type[ctx] = self.VOID
         if ctx not in self.node_code.keys():
             self.node_code[ctx] = self.node_code[ctx.getChild(0)]
         
+    def exitDeclaration(self, ctx: DecafParser.DeclarationContext):
+        self.node_type[ctx] = self.node_type[ctx.getChild(0)]
 
-
-    # def exitDeclaration(self, ctx: DecafParser.DeclarationContext):
-    #     self.node_type[ctx] = self.node_type[ctx.getChild(0)]
+        if ctx.getChild(0) in self.node_code.keys():
+            self.node_code[ctx] = self.node_code[ctx.getChild(0)]
 
     def exitProgram(self, ctx: DecafParser.ProgramContext):
 
         self.current_scope.ToTable()
         print('---------- FIN --------------')
+
+        code = []
+        for declr in ctx.declaration():
+            if declr in self.node_code.keys():
+                code += self.node_code[declr]['code'] + ['\n']
+
+        self.codigogenerado = code.copy()
+        # for c in code:
+        #     print(c)
 
         # self.tabla_methods.ToTable()
         # self.tabla_struct.ToTable()

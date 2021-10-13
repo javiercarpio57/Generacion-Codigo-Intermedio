@@ -596,11 +596,12 @@ class DecafPrinter(DecafListener):
         right = self.node_type[ctx.expr()]
         result_type = self.VOID
 
-        if left != right:
-            result_type = self.ERROR
-            line = ctx.assign_op().start.line
-            col = ctx.assign_op().start.column
-            self.errores.Add(line, col, self.errores.ASIGNACION)
+        if left != self.VOID:
+            if left != right:
+                result_type = self.ERROR
+                line = ctx.assign_op().start.line
+                col = ctx.assign_op().start.column
+                self.errores.Add(line, col, self.errores.ASIGNACION)
         self.node_type[ctx] = result_type
 
     def exitExpr(self, ctx: DecafParser.ExprContext):
@@ -829,6 +830,7 @@ class DecafPrinter(DecafListener):
                                 else:
                                     tipo_retorno = self.ERROR
                                     self.node_type[location] = self.ERROR
+                                    
                     else:
                         line = location.start.line
                         col = location.start.column
@@ -965,8 +967,12 @@ class DecafPrinter(DecafListener):
                     print('------------ LOCATION SALIDA -------------------', result_type)
 
     def exitLocation(self, ctx: DecafParser.LocationContext):
-        if ctx not in self.node_type.keys():
-            self.node_type[ctx] = self.node_type[ctx.getChild(0)]
+        try:
+            if ctx not in self.node_type.keys():
+                self.node_type[ctx] = self.node_type[ctx.getChild(0)]
+        except:
+            print('hubo clavo')
+            self.node_type[ctx] = self.VOID
 
     def exitDeclaration(self, ctx: DecafParser.DeclarationContext):
         self.node_type[ctx] = self.node_type[ctx.getChild(0)]
@@ -1028,13 +1034,13 @@ class Compilar():
                 lexer = DecafLexer(input)
                 stream = CommonTokenStream(lexer)
                 parser = DecafParser(stream)
-                self.myError = MyErrorListener()
+                self.myError2 = MyErrorListener()
                 parser.removeErrorListeners()
-                parser.addErrorListener(self.myError)
+                parser.addErrorListener(self.myError2)
                 tree = parser.program()
-                self.printer = gc.GeneracionCodigoPrinter()
+                self.printer2 = gc.GeneracionCodigoPrinter()
                 walker = ParseTreeWalker()
-                walker.walk(self.printer, tree)
+                walker.walk(self.printer2, tree)
 
     def HasLexicalError(self):
         return self.myError.getHasError()
@@ -1042,4 +1048,4 @@ class Compilar():
 comp = Compilar('fact_struct.decaf')
     # self.showErrors.setText(errores)
 # if comp.printer.node_type[comp.printer.root] == 'error' or len(comp.printer.errores.errores) > 0:
-    # comp.printer.errores.ToString()
+#     comp.printer.errores.ToString()

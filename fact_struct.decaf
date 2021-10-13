@@ -1,18 +1,9 @@
 class Program
 {
+	int a;
+	boolean globalArr[5];
 	void main(void)
 	{
-		boolean a;
-		int b;
-		int c;
-		int d;
-		while ((b < 10) && (b > 20)) {
-			while (c < 5) {
-				d = d + 1;
-				if (d == 30) {
-					d = 0;
-				}
-			}
-		}
+		globalArr[2 * 2] = True;
 	}
 }

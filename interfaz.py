@@ -31,10 +31,12 @@ class MainWindow(QMainWindow):
 		self.tabs = QTabWidget()
 		self.tab1 = QWidget()
 		self.tab2 = QWidget()
+		self.tab3 = QWidget()
 
 		# # Add tabs
 		self.tabs.addTab(self.tab1, "Text Editor")
-		self.tabs.addTab(self.tab2, "Results")
+		self.tabs.addTab(self.tab2, "Errores gramaticales")
+		self.tabs.addTab(self.tab3, "Generación de código intermedio")
 
 		# creating a QPlainTextEdit object
 		self.editor = QPlainTextEdit()
@@ -45,6 +47,13 @@ class MainWindow(QMainWindow):
 		self.tab2.layout = QVBoxLayout()
 		self.tab2.layout.addWidget(self.showErrors)
 		self.tab2.setLayout(self.tab2.layout)
+
+		self.codigoIntermedio = QLabel()
+		self.codigoIntermedio.setFont(fixedfont)
+		self.codigoIntermedio.setText("")
+		self.tab3.layout = QVBoxLayout()
+		self.tab3.layout.addWidget(self.codigoIntermedio)
+		self.tab3.setLayout(self.tab3.layout)
 
 		self.editor.setFont(fixedfont)
 
@@ -291,13 +300,16 @@ class MainWindow(QMainWindow):
 				self.showErrors.setText(errores)
 				
 			else:
+				self.tabs.setCurrentIndex(1)
 				if compilado.printer.node_type[compilado.printer.root] == 'error' or len(compilado.printer.errores.errores) > 0:
 					# print(compilado.printer.errores.GetErrores())
 					errores = '\n'.join(compilado.printer.errores.GetErrores())
 					self.showErrors.setText(errores)
 				else:
-					self.showErrors.setText('Sin errores :)')
-			self.tabs.setCurrentIndex(1)
+					self.tabs.setCurrentIndex(2)
+					codigo = '\n'.join(compilado.printer2.codigogenerado)
+					self.showErrors.setText('No hay errores gramaticales')
+					self.codigoIntermedio.setText(codigo)
 
 	# save to path method
 	def _save_to_path(self, path):

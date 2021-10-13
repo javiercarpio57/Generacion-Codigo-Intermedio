@@ -143,7 +143,7 @@ vardeclr            : var_type field_var SEMICOLON;
 
 field_declr         : var_type field_var (COMMA field_var)* SEMICOLON;
 
-array_id            : ID LSQUARE (int_literal | var_id) RSQUARE (POINT location)?;
+array_id            : ID LSQUARE (int_literal | var_id | expr) RSQUARE (POINT location)?;
 
 field_var           : var_id | array_id;
 
