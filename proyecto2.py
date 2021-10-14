@@ -1045,7 +1045,7 @@ class Compilar():
     def HasLexicalError(self):
         return self.myError.getHasError()
 
-comp = Compilar('fact_struct.decaf')
+# comp = Compilar('fact_struct.decaf')
     # self.showErrors.setText(errores)
 # if comp.printer.node_type[comp.printer.root] == 'error' or len(comp.printer.errores.errores) > 0:
 #     comp.printer.errores.ToString()

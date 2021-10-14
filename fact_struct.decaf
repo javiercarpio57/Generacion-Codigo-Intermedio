@@ -1,9 +1,16 @@
 class Program
 {
-	int a;
-	boolean globalArr[5];
+	struct B {
+		int a;
+	};
+	struct A {
+		int a;
+		struct B b[5];
+	};
+
 	void main(void)
 	{
-		globalArr[2 * 2] = True;
+		struct A a[10];
+		a[1].b[2].a = 5;
 	}
 }

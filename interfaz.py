@@ -48,9 +48,9 @@ class MainWindow(QMainWindow):
 		self.tab2.layout.addWidget(self.showErrors)
 		self.tab2.setLayout(self.tab2.layout)
 
-		self.codigoIntermedio = QLabel()
+		self.codigoIntermedio = QPlainTextEdit()
 		self.codigoIntermedio.setFont(fixedfont)
-		self.codigoIntermedio.setText("")
+		self.codigoIntermedio.setPlainText("")
 		self.tab3.layout = QVBoxLayout()
 		self.tab3.layout.addWidget(self.codigoIntermedio)
 		self.tab3.setLayout(self.tab3.layout)
@@ -309,7 +309,7 @@ class MainWindow(QMainWindow):
 					self.tabs.setCurrentIndex(2)
 					codigo = '\n'.join(compilado.printer2.codigogenerado)
 					self.showErrors.setText('No hay errores gramaticales')
-					self.codigoIntermedio.setText(codigo)
+					self.codigoIntermedio.setPlainText(codigo)
 
 	# save to path method
 	def _save_to_path(self, path):

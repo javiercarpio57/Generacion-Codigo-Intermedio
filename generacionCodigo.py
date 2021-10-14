@@ -30,12 +30,6 @@ class GeneracionCodigoPrinter(DecafListener):
             'error': self.ERROR
         }
 
-        self.sizes = {
-            self.INT: 4,
-            self.STRING: 2,
-            self.BOOLEAN: 1
-        }
-
         self.ambitos = []
         self.current_scope = None
         self.tabla_tipos = TablaTipos()
@@ -203,7 +197,8 @@ class GeneracionCodigoPrinter(DecafListener):
             size = 0
 
             if ctx.field_var().array_id().int_literal() is not None:
-                size = int(ctx.field_var().array_id().int_literal().getText()) * self.sizes[tipo]
+                tipo_complejo = self.tabla_tipos.LookUp(tipo)
+                size = int(ctx.field_var().array_id().int_literal().getText()) * tipo_complejo['Size']
 
             if 'struct' in tipo_array:
                 self.tabla_tipos.Add(tipo_array, size, self.tabla_tipos.ARRAY + self.tabla_tipos.STRUCT)
@@ -238,9 +233,6 @@ class GeneracionCodigoPrinter(DecafListener):
 
     def enterStatement_if(self, ctx: DecafParser.Statement_ifContext):
         siguiente, true, false = self.NewLabel('if')
-        # if ctx in self.node_code.keys():
-        #     print('asignando next de while')
-        #     siguiente = self.node_code[ctx]['next']
 
         self.node_code[ctx] = {
             'next': siguiente,
@@ -260,29 +252,18 @@ class GeneracionCodigoPrinter(DecafListener):
                 'false': siguiente
             }
 
-    # def enterStruct_declr(self, cstx: DecafParser.Struct_declrContext):
-    #     self.NewScope()
+    def enterStruct_declr(self, cstx: DecafParser.Struct_declrContext):
+        self.NewScope()
 
-    # def exitStruct_declr(self, ctx: DecafParser.Struct_declrContext):
-    #     tipo = ctx.getChild(0).getText() + ctx.getChild(1).getText()
+    def exitStruct_declr(self, ctx: DecafParser.Struct_declrContext):
+        tipo = ctx.getChild(0).getText() + ctx.getChild(1).getText()
 
-    #     if self.tabla_tipos.LookUp(tipo) == 0:
-    #         size_scope = self.current_scope.GetSize()
-    #         self.tabla_tipos.Add(tipo, size_scope, self.tabla_tipos.STRUCT)
-    #         self.tabla_struct.ExtractInfo(tipo, self.current_scope, self.tabla_tipos)
-    #         self.PopScope()
+        size_scope = self.current_scope.GetSize()
+        self.tabla_tipos.Add(tipo, size_scope, self.tabla_tipos.STRUCT)
+        self.tabla_struct.ExtractInfo(tipo, self.current_scope, self.tabla_tipos)
+        self.PopScope()
 
-    #         self.node_type[ctx] = self.VOID
-    #         for child in ctx.children:
-    #             if not isinstance(child, TerminalNode):
-    #                 if self.node_type[child] == self.ERROR:
-    #                     self.node_type[ctx] = self.ERROR
-    #                     break
-    #     else:
-    #         self.node_type[ctx] = self.ERROR
-    #         line = ctx.start.line
-    #         col = ctx.start.column
-    #         self.errores.Add(line, col, self.errores.IDENTIFICADOR_DECLARADO_MUCHAS_VECES)
+        self.node_type[ctx] = self.VOID
 
     def enterVar_id(self, ctx: DecafParser.Var_idContext):
         parent = ctx.parentCtx
@@ -290,15 +271,15 @@ class GeneracionCodigoPrinter(DecafListener):
             self.node_type[ctx] = self.node_type[parent]
 
     def exitVar_id(self, ctx: DecafParser.Var_idContext):
-        # parent = ctx.parentCtx
-        # if parent in self.node_type.keys() or ctx in self.node_type.keys():
-        #     return
+        parent = ctx.parentCtx
+        if parent in self.node_type.keys() or ctx in self.node_type.keys():
+            return
 
         # if ctx.getChildCount() == 1:
         id = ctx.getText()
         variable = self.Find(id)
         tipo = ''
-        
+
         if variable['Tipo'] in [self.INT, self.STRING, self.BOOLEAN]:
             tipo = self.data_type[variable['Tipo']]
         else:
@@ -342,7 +323,8 @@ class GeneracionCodigoPrinter(DecafListener):
         temp = self.newTemp()
         temp2 = self.newTemp()
         tipo_real = tipo.split('array')[-1]
-        size = self.sizes[tipo_real]
+        size = self.tabla_tipos.LookUp(tipo_real)['Size']
+
 
         addr_viejo = self.node_code[ctx.getChild(2)]['addr']
         code = self.node_code[ctx.getChild(2)]['code'] + \
@@ -365,32 +347,6 @@ class GeneracionCodigoPrinter(DecafListener):
             elif ctx.array_id() is not None:
                 self.node_type[ctx] = self.node_type[ctx.getChild(0)]
 
-    # def enterField_declr(self, ctx: DecafParser.Field_declrContext):
-    #     tipo = ctx.var_type().getText()
-
-    #     for child in ctx.children:
-    #         if not isinstance(child, TerminalNode) and isinstance(child, DecafParser.Field_varContext):
-    #             id = child.var_id().getText()
-
-    #             if self.current_scope.LookUp(id) == 0:
-    #                 type_symbol = self.tabla_tipos.LookUp(tipo)
-    #                 size = type_symbol['Size']
-    #                 offset = self.current_scope._offset
-                    
-    #                 self.current_scope.Add(tipo, id, size, offset, False)
-    #             else:
-    #                 self.node_type[child] = self.ERROR
-    #                 line = child.var_id().start.line
-    #                 col = child.var_id().start.column
-    #                 self.errores.Add(line, col, self.errores.IDENTIFICADOR_DECLARADO_MUCHAS_VECES)
-
-    # def exitField_declr(self, ctx: DecafParser.Field_declrContext):
-    #     self.node_type[ctx] = self.VOID
-    #     for child in ctx.children:
-    #         if not isinstance(child, TerminalNode):
-    #             if self.node_type[child] == self.ERROR:
-    #                 self.node_type[ctx] = self.ERROR
-    #                 break
 
     def exitVardeclr(self, ctx: DecafParser.VardeclrContext):
         self.node_type[ctx] = self.VOID
@@ -432,24 +388,13 @@ class GeneracionCodigoPrinter(DecafListener):
         addr = ''
         code = []
         statements = ctx.statement()
-        # if len(statements) == 1:
-        #     print('SOLO UN STATEMENT')
-        #     code = self.node_code[statements[0]]['code']
-        #     if 'next' in self.node_code[statements[0]].keys():
-        #         print('TENGO NEXT EN BLOCK 1')
-        #         code += [self.node_code[statements[0]]['next']]
-        # else:
         for i in range(len(statements)):
-            # print('EXIT BLOCK', self.node_code[statements[i]])
             code += self.node_code[statements[i]]['code']
-            # print(i, len(statements) - 1)
-            # if i < len(statements) - 1:
+            
             if 'next' in self.node_code[statements[i]].keys(): #and 'next' in self.node_code[statements[i + 1]].keys():
-                print('TENGO NEXT EN BLOCK')
                 code += [self.node_code[statements[i]]['next']]
-                print(code)
             else:
-                print('NO TENGO NEXT EN BLOCK :(')
+                pass
 
         self.node_code[ctx] = {
             'addr': addr,
@@ -487,10 +432,11 @@ class GeneracionCodigoPrinter(DecafListener):
             return
 
         hasError = False
-        # print('PARAMETER', parameters)
         parameter_code = []
+        total_code = []
         for i in range(len(parameters)):
             param = self.node_code[parameters[i]]['addr']
+            total_code += self.node_code[parameters[i]]['code']
             parameter_code += [f'PARAM {param}']
             tipo_parametro = self.node_type[parameters[i]]
             tipo_metodo = method_info['Parameters'][i]['Tipo']
@@ -499,27 +445,10 @@ class GeneracionCodigoPrinter(DecafListener):
 
         code += str(len(parameters))
         self.node_code[ctx] = {
-            'code': parameter_code + [code],
+            'code': total_code + parameter_code + [code],
             'addr': 'R'
         }
-    # def GetMethodType(self, ctx):
-    #     nodo = ctx.parentCtx
-    #     hijos = [str(type(i)) for i in nodo.children if not isinstance(i, TerminalNode)]
-    #     # print('GET METHOD', type(nodo), nodo.getChildCount())
-    #     # print('get method type:', [str(type(i)) for i in nodo.children if not isinstance(i, TerminalNode)], str(DecafParser.Return_typeContext), str(DecafParser.Return_typeContext) in [str(type(i)) for i in nodo.children if not isinstance(i, TerminalNode)])
-    #     while str(DecafParser.Return_typeContext) not in hijos:
-    #         nodo = nodo.parentCtx
-    #         hijos = [str(type(i)) for i in nodo.children if not isinstance(i, TerminalNode)]
-    #         # if isinstance(nodo, DecafParser.StatementContext):
-    #         #     nodo = ctx.parentCtx.
-    #         # print('GET METHOD', type(nodo), nodo.getChildCount())
-    #         # print('get method type:', [str(type(i)) for i in nodo.children if not isinstance(i, TerminalNode)], str(DecafParser.Return_typeContext), str(DecafParser.Return_typeContext) in [str(type(i)) for i in nodo.children if not isinstance(i, TerminalNode)])
-    #         # break
 
-    #     if nodo.return_type().var_type() is not None:
-    #         return nodo.return_type().var_type().getText()
-    #     else:
-    #         return nodo.return_type().getText()
 
     def exitStatement_if(self, ctx: DecafParser.Statement_ifContext):
         tipo_if = self.node_type[ctx.expr()]
@@ -534,23 +463,15 @@ class GeneracionCodigoPrinter(DecafListener):
         code = []
         siguiente = self.node_code[ctx]['next']
         if ctx.ELSE():
-            print('else', self.node_code[ctx])
-            # print('else', self.node_code[ctx.expr()])
             code = self.node_code[ctx.expr()]['code'] + [self.node_code[ctx]['true']] + \
                 ['\t' + x for x in self.node_code[ctx.block()[0]]['code']] + ['\tGOTO ' + self.node_code[ctx]['next']] + \
-                [self.node_code[ctx]['false']] + ['\t' + x for x in self.node_code[ctx.block()[-1]]['code']] 
-                # + \
-                # [self.node_code[ctx]['next']]
+                [self.node_code[ctx]['false']] + ['\t' + x for x in self.node_code[ctx.block()[-1]]['code']]
 
         else:
-            print('BLOCK', self.node_code[ctx])
             code = self.node_code[ctx.expr()]['code'] + \
                 [self.node_code[ctx]['true']] + \
-                ['\t' + x for x in self.node_code[ctx.block()[0]]['code']] # + [self.node_code[ctx]['next']]
+                ['\t' + x for x in self.node_code[ctx.block()[0]]['code']]
 
-        # if ctx in self.node_code.keys():
-        #     self.node_code[ctx]['code'] = code
-        # else:
         self.node_code[ctx] = {
             'code': code,
             'next': siguiente
@@ -565,9 +486,9 @@ class GeneracionCodigoPrinter(DecafListener):
         code = [self.node_code[ctx]['begin']] + ['\t' + x for x in self.node_code[ctx.expr()]['code']] + \
             [self.node_code[ctx.expr()]['true']] + ['\t' + x for x in self.node_code[ctx.block()]['code']] + \
             ['\tGOTO ' + self.node_code[ctx]['begin']]
-            #  + \
-            # [self.node_code[ctx]['next']]
-        siguiente = self.node_code[ctx]['next']
+
+        siguiente = self.node_code[ctx.expr()]['false']
+
         self.node_code[ctx] = {
             'code': code,
             'next': siguiente
@@ -576,8 +497,6 @@ class GeneracionCodigoPrinter(DecafListener):
     def exitStatement_return(self, ctx: DecafParser.Statement_returnContext):
         self.node_type[ctx] = self.node_type[ctx.expr()]
 
-        print('RETURN', self.node_code[ctx.expr()])
-        # topget = self.TopGet()
         addr = self.node_code[ctx.expr()]['addr']
         code = self.node_code[ctx.expr()]['code'] + [f'RETURN {addr}']
         self.node_code[ctx] = {
@@ -608,9 +527,15 @@ class GeneracionCodigoPrinter(DecafListener):
         E = self.node_code[right]
         if left.var_id():
             id = left.var_id().getText()
-            topget = self.TopGet(id)
-            print('ASSIGN', E)
-            code = E['code'] + [topget + ' = ' + E['addr']]
+            
+            optional = []
+            if left in self.node_code.keys():
+                topget = self.node_code[left]['addr']
+                optional = self.node_code[left]['code']
+            else:
+                topget = self.TopGet(id)
+                
+            code = E['code'] + optional + [topget + ' = ' + E['addr']]
             self.node_code[ctx] = {
                 'code': code,
                 'addr': ''
@@ -676,18 +601,9 @@ class GeneracionCodigoPrinter(DecafListener):
                     'code': code
                 }
             elif ctx.NOT():
-                # print('NOT', self.node_code[ctx.expr()[0]])
                 self.node_code[ctx] = self.node_code[ctx.expr()[0]]
-
-                # falso = self.node_code[parent]['false']
-                
-                # self.node_code[parent]['false'] = self.node_code[parent]['true']
-                # self.node_code[parent]['true'] = falso
             else:
-                print('EXIT EXPR', self.node_code[non_terminal])
                 self.node_code[ctx] = self.node_code[non_terminal]
-        # elif len(nodes_nonterminals) == 0:
-        #     self.node_type[ctx] = self.VOID
         else:
             tipo1 = self.node_type[ctx.getChild(0)]
             tipo2 = self.node_type[ctx.getChild(2)]
@@ -752,12 +668,9 @@ class GeneracionCodigoPrinter(DecafListener):
                 }
                 
             elif ctx.AND():
-                print('ENTRANDO A AND')
                 result_type = self.BOOLEAN
                 parent = ctx.parentCtx
 
-                print('LEFT', self.node_code[left])
-                print('right', self.node_code[right])
                 code = self.node_code[left]['code'] + [self.node_code[left]['true']] + ['\t' + x for x in self.node_code[right]['code']]
 
                 false = self.node_code[ctx]['false']
@@ -792,218 +705,216 @@ class GeneracionCodigoPrinter(DecafListener):
                 else:
                     self.node_type[ctx] = self.VOID
 
-    # def IterateChildren(self, location, parent_type, description):
-    #     if location.var_id() is not None:
-    #         # CASO BASE
-    #         if location.var_id().location() is None:
-    #             tipo_retorno = self.ERROR
-    #             id = location.var_id().getChild(0).getText()
-    #             if description is None:
-    #                 self.node_type[location] = self.ERROR
-    #                 # line = location.start.line
-    #                 # col = location.start.column
-    #                 # self.errores.Add(line, col, f'Variable "{id}" no ha sido declarada previamente.')
-    #             else:
-    #                 if 'struct' in description:
-    #                     child = self.tabla_struct.GetChild(parent_type, id)
-    #                     if child == 0:
-    #                         self.node_type[location] = self.ERROR
-    #                         line = location.start.line
-    #                         col = location.start.column
-    #                         self.errores.Add(line, col, f'Variable "{id}" no ha sido declarada previamente.')
-    #                     else:
-    #                         tipo_nodo = self.tabla_tipos.LookUp(child['Tipo'])
-    #                         tipo_retorno = tipo_nodo['Tipo']
-    #                         self.node_type[location] = tipo_nodo['Tipo']
-    #                 else:
-    #                     line = location.start.line
-    #                     col = location.start.column
-    #                     self.errores.Add(line, col, self.errores.MUST_STRUCT)
-    #                     self.node_type[location] = self.ERROR
+    def IterateChildren(self, location, parent_type, description):
+        if location.var_id():
+            # CASO BASE
+            if location.var_id().location() is None:
+                tipo_retorno = self.ERROR
+                id = location.var_id().getChild(0).getText()
 
-    #             return tipo_retorno
+                child = self.tabla_struct.GetChild(parent_type, id)
+                tipo_nodo = self.tabla_tipos.LookUp(child['Tipo'])
+                self.tabla_struct.ToTable()
+                tipo_retorno = tipo_nodo['Tipo']
+                self.node_type[location] = tipo_nodo['Tipo']
+
+                num = child['Offset']
+                total = {
+                    'code': [],
+                    'addr': str(num)
+                }
+                self.node_code[location] = total
+
+                return tipo_retorno, total
              
             
-    #         print('----------------------------------------------------------------------------------------')
-    #         id = location.var_id().getChild(0).getText()
-    #         tipo_nodo = None
-    #         child_type = None
-    #         child_desc = None
+            print('----------------------------------------------------------------------------------------')
+            id = location.var_id().getChild(0).getText()
+            tipo_nodo = None
+            child_type = None
+            child_desc = None
 
-    #         if description is None:
-    #             line = location.start.line
-    #             col = location.start.column
-    #             self.errores.Add(line, col, self.errores.MUST_STRUCT)
-    #         else:
-    #             if 'struct' in description:
-    #                 child = self.tabla_struct.GetChild(parent_type, id)
-    #                 if child == 0:
-    #                     line = location.start.line
-    #                     col = location.start.column
-    #                     self.errores.Add(line, col, f'Variable "{id}" no ha sido declarada previamente.')
-    #                 else:
-    #                     child_type = child['Tipo']
-    #                     child_desc = child['Description']
-    #                     tipo_nodo = self.tabla_tipos.LookUp(child['Tipo'])
-    #             else:
-    #                 line = location.start.line
-    #                 col = location.start.column
-    #                 self.errores.Add(line, col, self.errores.MUST_STRUCT)
+            child = self.tabla_struct.GetChild(parent_type, id)
+            child_type = child['Tipo']
+            child_desc = child['Description']
+            tipo_nodo = self.tabla_tipos.LookUp(child['Tipo'])
 
-    #         result_type = self.IterateChildren(location.var_id().location(), child_type, child_desc)
-    #         self.node_type[location] = result_type
-    #         return result_type
+            result_type, num = self.IterateChildren(location.var_id().location(), child_type, child_desc)
 
-    #     elif location.array_id() is not None:
-    #         # CASO BASE
+            temp = self.newTemp()
+            code = [temp + ' = ' + str(num['addr']) + ' + ' + str(child['Offset'])]
+            total = {
+                'code': num['code'] + code,
+                'addr': temp
+            }
+            self.node_type[location] = result_type
+            self.node_code[location] = total
+            return result_type, total
+
+        elif location.array_id():
+            # CASO BASE
             
-    #         if location.array_id().location() is None:
-    #             tipo_retorno = self.ERROR
-    #             id = location.array_id().getChild(0).getText()
-    #             if description is None:
-    #                 self.node_type[location] = self.ERROR
-    #                 # line = location.start.line
-    #                 # col = location.start.column
-    #                 # self.errores.Add(line, col, f'Variable "{id}" no ha sido declarada previamente.')
-    #             else:
-    #                 if 'struct' in description:
-    #                     child = self.tabla_struct.GetChild(parent_type, id)
-    #                     if child == 0:
-    #                         self.node_type[location] = self.ERROR
-    #                         line = location.start.line
-    #                         col = location.start.column
-    #                         self.errores.Add(line, col, f'Variable "{id}" no ha sido declarada previamente.')
-    #                     else:
-    #                         # HIJO IZQUIERDO
-    #                         tipo_nodo = self.tabla_tipos.LookUp(child['Tipo'])
-    #                         tipo_retorno = tipo_nodo['Tipo'].split('array')[-1]
+            if location.array_id().location() is None:
+                tipo_retorno = self.ERROR
+                id = location.array_id().getChild(0).getText()
 
-    #                         # HIJO DERECHO
-    #                         if location.array_id().int_literal() is not None:
-    #                             if 'array' not in child['Tipo']:
-    #                                 line = location.array_id().start.line
-    #                                 col = location.array_id().start.column
-    #                                 self.errores.Add(line, col, f'Variable "{id}" debe ser un array.') # ATENCION
-    #                                 self.node_type[location] = self.ERROR
-    #                             else:
-    #                                 self.node_type[location] = child['Tipo'].split('array')[-1]
-    #                         elif location.array_id().var_id() is not None:
-    #                             tipo = child['Tipo']
-    #                             tipo_var = self.Find(location.array_id().var_id().getText())
-    #                             self.CheckErrorInArrayId(location.array_id(), tipo, tipo_var)
+                child = self.tabla_struct.GetChild(parent_type, id)
+                # HIJO IZQUIERDO
+                tipo_nodo = self.tabla_tipos.LookUp(child['Tipo'])
+                tipo_retorno = tipo_nodo['Tipo'].split('array')[-1]
+
+                # HIJO DERECHO
+                addr = ''
+                tipo_ = ''
+                if location.array_id().int_literal():
+                    self.node_type[location] = child['Tipo'].split('array')[-1]
+                    tipo_ = child['Tipo'].split('array')[-1]
+
+                    num = location.array_id().int_literal().getText()
+                    addr = num
+                elif location.array_id().var_id():
+                    tipo = child['Tipo']
+                    tipo_ = tipo
+                    tipo_var = self.Find(location.array_id().var_id().getText())
+                    self.CheckErrorInArrayId(location.array_id(), tipo, tipo_var)
+    
+                    self.node_type[location] = tipo_nodo['Tipo'].split('array')[-1]
+                    num = self.TopGet(location.array_id().var_id().getText())
+                    addr = num
                 
-    #                             if self.node_type[location.array_id()] != self.ERROR:
-    #                                 self.node_type[location] = tipo_nodo['Tipo'].split('array')[-1]
-    #                             else:
-    #                                 tipo_retorno = self.ERROR
-    #                                 self.node_type[location] = self.ERROR
-    #                 else:
-    #                     line = location.start.line
-    #                     col = location.start.column
-    #                     self.errores.Add(line, col, self.errores.MUST_STRUCT)
-    #                     self.node_type[location] = self.ERROR
-    #             return tipo_retorno
+                temp = self.newTemp()
+                temp2 = self.newTemp()
+                offset = child['Offset']
+                size = self.tabla_tipos.LookUp(tipo_)['Size']
+                code = [f'{temp} = {size} * {addr}']
+                code += [f'{temp2} = {temp} + {offset}']
+
+                total = {
+                    'code': code,
+                    'addr': temp2
+                }
+                self.node_code[location] = total
+                return tipo_retorno, total
             
-    #         print('----------------------------------------------------------------------------------------')
-    #         id = location.array_id().getChild(0).getText()
-    #         tipo_nodo = None
-    #         child_type = None
-    #         child_desc = None
+            print('----------------------------------------------------------------------------------------')
+            id = location.array_id().getChild(0).getText()
+            tipo_nodo = None
+            child_type = None
+            child_desc = None
 
-    #         tipo_retorno = self.VOID
-    #         if 'struct' in description:
-    #             child = self.tabla_struct.GetChild(parent_type, id)
-    #             if child == 0:
-    #                 line = location.start.line
-    #                 col = location.start.column
-    #                 self.errores.Add(line, col, f'Variable "{id}" no ha sido declarada previamente.')
-    #             else:
-    #                 child_type = child['Tipo']
-    #                 child_desc = child['Description']
-    #                 # tipo_nodo = self.tabla_tipos.LookUp(child['Tipo'])
+            tipo_retorno = self.VOID
+            child = self.tabla_struct.GetChild(parent_type, id)
 
-    #                 # HIJO IZQUIERDO
-    #                 tipo_nodo = self.tabla_tipos.LookUp(child['Tipo'])
+            child_type = child['Tipo']
+            child_desc = child['Description']
+            # tipo_nodo = self.tabla_tipos.LookUp(child['Tipo'])
 
-    #                 # HIJO DERECHO
-    #                 if location.array_id().int_literal() is not None:
-    #                     if 'array' not in child['Tipo']:
-    #                         line = location.array_id().start.line
-    #                         col = location.array_id().start.column
-    #                         self.errores.Add(line, col, f'Variable "{id}" debe ser un array.')
-    #                         self.node_type[location] = self.ERROR
-    #                 elif location.array_id().var_id() is not None:
-    #                     tipo = child['Tipo']
-    #                     tipo_var = self.Find(location.array_id().var_id().getText())
-    #                     self.CheckErrorInArrayId(location.array_id(), tipo, tipo_var)
+            # HIJO IZQUIERDO
+            tipo_nodo = self.tabla_tipos.LookUp(child['Tipo'])
 
-    #                 if location.array_id() in self.node_type.keys():
-    #                     if self.node_type[location.array_id()] == self.ERROR:
-    #                         tipo_retorno = self.ERROR
-    #                     # self.node_type[location] = self.ERROR
-    #         else:
-    #             line = location.start.line
-    #             col = location.start.column
-    #             self.errores.Add(line, col, self.errores.MUST_STRUCT)
+            # HIJO DERECHO
+            if location.array_id().var_id():
+                tipo = child['Tipo']
+                tipo_var = self.Find(location.array_id().var_id().getText())
+                self.CheckErrorInArrayId(location.array_id(), tipo, tipo_var)
 
-    #         result_type = self.IterateChildren(location.array_id().location(), child_type, child_desc)
-    #         self.node_type[location] = result_type
-    #         if tipo_retorno == self.ERROR:
-    #             self.node_type[location] = tipo_retorno
-    #             result_type = tipo_retorno
-    #         return result_type
+            result_type, num = self.IterateChildren(location.array_id().location(), child_type, child_desc)
+            self.node_type[location] = result_type
+
+            topget_aux = ''
+            if isinstance(location.array_id().getChild(2), DecafParser.Int_literalContext):
+                topget_aux = location.array_id().int_literal().getText()
+            elif isinstance(location.array_id().getChild(2), DecafParser.Var_idContext):
+                topget_aux = self.TopGet(location.array_id().var_id().getText())
+            temp = self.newTemp()
+            temp2 = self.newTemp()
+            temp3 = self.newTemp()
+
+            offset = child['Offset']
+            size = self.tabla_tipos.LookUp(child['Tipo'].split('array')[-1])['Size']
+
+            addr = num['addr']
+
+            code = [f'{temp} = {size} * {topget_aux}']
+            code += [f'{temp2} = {temp} + {offset}']
+            code += [f'{temp3} = {temp2} + {addr}']
+
+            total = {
+                'code': num['code'] + code,
+                'addr': temp3
+            }
+            self.node_code[location] = total
+
+            return result_type, total
 
     def enterLocation(self, ctx: DecafParser.LocationContext):
         parent = ctx.parentCtx
 
         if ctx in self.node_type.keys():
             return
-        if ctx.var_id() is not None:
+        if ctx.var_id():
             if ctx.var_id().location() is None:
                 return
-        elif ctx.array_id() is not None:
+        elif ctx.array_id():
             if ctx.array_id().location() is None:
                 return
 
         
-        if ctx.var_id() is not None:
-            if ctx.var_id().location() is not None:
+        if ctx.var_id():
+            if ctx.var_id().location():
                 print('------------ LOCATION ENTRADA -------------------')
                 id = ctx.var_id().getChild(0).getText()
-                # self.current_scope.ToTable()
                 
                 symbol = self.Find(id)
                 tipo_id = self.tabla_tipos.LookUp(symbol['Tipo'])
-                print('TIPO VARIABLE', tipo_id) 
-                result_type = self.IterateChildren(ctx.var_id().location(), tipo_id['Tipo'], tipo_id['Description'])
+                result_type, total = self.IterateChildren(ctx.var_id().location(), tipo_id['Tipo'], tipo_id['Description'])
                 self.node_type[ctx] = result_type
+
+                temp = self.newTemp()
+                offset = symbol['Offset']
+                code = f'{temp} = {offset} + ' + total['addr']
+                topget = self.TopGet(id, temp)
+
+                self.node_code[ctx] = {
+                    'code': total['code'] + [code],
+                    'addr': topget
+                }
+
                 print('------------ LOCATION SALIDA -------------------', result_type)
 
-        if ctx.array_id() is not None:
-            if ctx.array_id().location() is not None:
+        if ctx.array_id():
+            if ctx.array_id().location():
                 print('------------ LOCATION ENTRADA -------------------')
                 id = ctx.array_id().getChild(0).getText()
                 symbol = self.Find(id)
                 tipo_id = self.tabla_tipos.LookUp(symbol['Tipo'])
-                # print('ARRAY ID ENTER LOCATION', id, tipo_id)
-                result_type = self.IterateChildren(ctx.array_id().location(), tipo_id['Tipo'], tipo_id['Description'])
+
+                result_type, total = self.IterateChildren(ctx.array_id().location(), tipo_id['Tipo'], tipo_id['Description'])
                 self.node_type[ctx] = result_type
 
+                temp = self.newTemp()
+                temp2 = self.newTemp()
+                temp3 = self.newTemp()
 
-            # HIJO IZQUIERDO
-            # tipo_nodo = self.tabla_tipos.LookUp(tipo_id['Tipo'])
+                topget_aux = ''
+                if isinstance(ctx.array_id().getChild(2), DecafParser.Int_literalContext):
+                    topget_aux = ctx.array_id().int_literal().getText()
+                elif isinstance(ctx.array_id().getChild(2), DecafParser.Var_idContext):
+                    topget_aux = self.TopGet(ctx.array_id().var_id().getText())
 
-            # HIJO DERECHO
-                # if ctx.array_id().var_id() is not None:
-                #     tipo = tipo_id['Tipo']
-                #     tipo_var = self.Find(ctx.array_id().var_id().getText())
-                #     self.CheckErrorInArrayId(ctx.array_id(), tipo, tipo_var)
-                # elif ctx.array_id().expr() is not None:
-                #     print('TIPO ARRAY', tipo_id)
-                #     tipo = tipo_id['Tipo']
-                #     tipo_var = self.Find(ctx.array_id().var_id().getText())
-                #     self.CheckErrorInArrayId(ctx.array_id(), tipo, tipo_var)
+                size = self.tabla_tipos.LookUp(symbol['Tipo'].split('array')[-1])['Size']
+                code = [f'{temp} = {topget_aux} * {size}']
 
+                offset = symbol['Offset']
+                code += [f'{temp2} = {offset} + {temp}']
+
+                addr = total['addr']
+                code += {f'{temp3} = {temp2} + {addr}'}
+
+                self.node_code[ctx] = {
+                    'code': total['code'] + code,
+                    'addr': temp3
+                }
 
                 print('------------ LOCATION SALIDA -------------------', result_type)
 
@@ -1011,9 +922,10 @@ class GeneracionCodigoPrinter(DecafListener):
         try:
             if ctx not in self.node_type.keys():
                 self.node_type[ctx] = self.node_type[ctx.getChild(0)]
+                # return
         except:
-            print('hubo clavo')
             self.node_type[ctx] = self.VOID
+            
         if ctx not in self.node_code.keys():
             self.node_code[ctx] = self.node_code[ctx.getChild(0)]
         
@@ -1034,12 +946,3 @@ class GeneracionCodigoPrinter(DecafListener):
                 code += self.node_code[declr]['code'] + ['\n']
 
         self.codigogenerado = code.copy()
-        # for c in code:
-        #     print(c)
-
-        # self.tabla_methods.ToTable()
-        # self.tabla_struct.ToTable()
-
-        # for i, j in self.node_type.items():
-        #     if isinstance(i, DecafParser.Var_idContext):
-        #         print(i, j)

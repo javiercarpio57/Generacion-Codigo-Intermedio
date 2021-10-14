@@ -35,7 +35,7 @@ class Program {
 	void main(void)
 	{
 		struct B y[10];
-		//int i;
+		int i;
 		int j;
 		int k;
 

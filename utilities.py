@@ -76,11 +76,13 @@ class TablaStruct():
         self.pretty_table = PrettyTable()
         self._symbols = []
 
-    def Add(self, parent, tipo, id, description):
+    def Add(self, parent, tipo, id, size, offset, description):
         self._symbols.append({
             'Parent': parent,
             'Tipo': tipo,
             'Id': id,
+            'Size': size,
+            'Offset': offset,
             'Description': description
         })
 
@@ -93,7 +95,7 @@ class TablaStruct():
         return 0
 
     def ToTable(self):
-        self.pretty_table.field_names = ['Parent', 'Tipo', 'ID', 'Description']
+        self.pretty_table.field_names = ['Parent', 'Tipo', 'ID', 'Size', 'Offset', 'Description']
         for i in self._symbols:
             self.pretty_table.add_row(list(i.values()))
 
@@ -104,7 +106,7 @@ class TablaStruct():
     def ExtractInfo(self, parent, scope, tabla_tipo):
         for i in scope._symbols:
             tipo = tabla_tipo.LookUp(i['Tipo'])
-            self.Add(parent, i['Tipo'], i['Id'], tipo['Description'])
+            self.Add(parent, i['Tipo'], i['Id'], i['Size'], i['Offset'], tipo['Description'])
     
     def GetChild(self, tipo, name):
         copy_symbols = self._symbols.copy()
