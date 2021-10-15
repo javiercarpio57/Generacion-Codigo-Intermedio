@@ -331,9 +331,10 @@ class GeneracionCodigoPrinter(DecafListener):
             [f'{temp} = {size} * {addr_viejo}'] + \
             [f'{temp2} = {temp} + {offset}']
 
+        topget = self.TopGet(id, temp2)
         self.node_code[ctx] = {
             'code': code,
-            'addr': temp2
+            'addr': topget
         }
         
 
@@ -535,6 +536,7 @@ class GeneracionCodigoPrinter(DecafListener):
             else:
                 topget = self.TopGet(id)
                 
+            print('E:', E)
             code = E['code'] + optional + [topget + ' = ' + E['addr']]
             self.node_code[ctx] = {
                 'code': code,

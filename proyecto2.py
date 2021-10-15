@@ -160,6 +160,7 @@ class DecafPrinter(DecafListener):
             line = ctx.block().start.line
             col = ctx.block().start.column
             self.errores.Add(line, col, self.errores.RETURN_TYPE)
+            # print('CON ERROR?')
 
         self.node_type[ctx] = self.VOID
 
@@ -506,35 +507,41 @@ class DecafPrinter(DecafListener):
         tipo_return = self.GetMethodType(ctx)
         if len(hijos_tipo) == 1:
             hijo_1 = hijos_tipo.pop()
-            if tipo_return == self.node_type[hijo_1]:
-                self.node_type[ctx] = self.node_type[hijo_1]
-            else:
-                self.node_type[ctx] = self.ERROR
-                line = hijo_1.start.line
-                col = hijo_1.start.column
-                self.errores.Add(line, col, self.errores.RETURN_TYPE)
+            print(tipo_return, self.node_type[hijo_1])
+            # if tipo_return == self.node_type[hijo_1]:
+            self.node_type[ctx] = self.node_type[hijo_1]
+            # else:
+            #     self.node_type[ctx] = self.ERROR
+            #     line = hijo_1.start.line
+            #     col = hijo_1.start.column
+            #     self.errores.Add(line, col, self.errores.RETURN_TYPE)
+            #     print('ERROR IF')
         else:
             if self.node_type[hijos_tipo[0]] != tipo_return and self.node_type[hijos_tipo[1]] != tipo_return:
                 self.node_type[ctx] = self.ERROR
                 line = hijos_tipo[0].start.line
                 col = hijos_tipo[0].start.column
                 self.errores.Add(line, col, self.errores.RETURN_TYPE)
+                print('ERROR IF 2')
 
                 line = hijos_tipo[1].start.line
                 col = hijos_tipo[1].start.column
                 self.errores.Add(line, col, self.errores.RETURN_TYPE)
+                print('ERROR IF 3')
                 return
             elif self.node_type[hijos_tipo[0]] != tipo_return:
                 self.node_type[ctx] = self.ERROR
                 line = hijos_tipo[0].start.line
                 col = hijos_tipo[0].start.column
                 self.errores.Add(line, col, self.errores.RETURN_TYPE)
+                print('ERROR IF 4')
                 return
             elif self.node_type[hijos_tipo[1]] != tipo_return:
                 self.node_type[ctx] = self.ERROR
                 line = hijos_tipo[1].start.line
                 col = hijos_tipo[1].start.column
                 self.errores.Add(line, col, self.errores.RETURN_TYPE)
+                print('ERROR IF 5')
                 return
 
 
@@ -1045,7 +1052,7 @@ class Compilar():
     def HasLexicalError(self):
         return self.myError.getHasError()
 
-# comp = Compilar('fact_struct.decaf')
+comp = Compilar('quicksort.decaf')
     # self.showErrors.setText(errores)
-# if comp.printer.node_type[comp.printer.root] == 'error' or len(comp.printer.errores.errores) > 0:
-#     comp.printer.errores.ToString()
+if comp.printer.node_type[comp.printer.root] == 'error' or len(comp.printer.errores.errores) > 0:
+    comp.printer.errores.ToString()
