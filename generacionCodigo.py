@@ -897,8 +897,9 @@ class GeneracionCodigoPrinter(DecafListener):
                 offset = symbol['Offset']
                 code = f'{temp} = {offset} + ' + total['addr'][0]
 
-                self.return_temp(total['addr'])
                 topget = self.TopGet(id, temp)
+                self.return_temp(total['addr'])
+                self.return_temp((temp, True))
 
                 self.node_code[ctx] = {
                     'code': total['code'] + [code],
