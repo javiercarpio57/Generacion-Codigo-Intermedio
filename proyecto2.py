@@ -1036,6 +1036,7 @@ class Compilar():
             if self.printer.node_type[self.printer.root] == 'error' or len(self.printer.errores.errores) > 0:
                 print('errores semanticos')
             else:
+                print(self.printer.tabla_tipos._types)
                 print('podemos generar codigo')
                 input = FileStream(url)
                 lexer = DecafLexer(input)
@@ -1052,7 +1053,7 @@ class Compilar():
     def HasLexicalError(self):
         return self.myError.getHasError()
 
-comp = Compilar('quicksort.decaf')
-    # self.showErrors.setText(errores)
-if comp.printer.node_type[comp.printer.root] == 'error' or len(comp.printer.errores.errores) > 0:
-    comp.printer.errores.ToString()
+# comp = Compilar('fact_array.decaf')
+#     # self.showErrors.setText(errores)
+# if comp.printer.node_type[comp.printer.root] == 'error' or len(comp.printer.errores.errores) > 0:
+#     comp.printer.errores.ToString()

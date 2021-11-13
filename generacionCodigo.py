@@ -15,6 +15,9 @@ class GeneracionCodigoPrinter(DecafListener):
         self.ifcont = 0
         self.whilecont = 0
         self.inst = 0
+
+        self.pool_temps = []
+        self.fill_temps()
         
         self.STRING = 'char'
         self.INT = 'int'
@@ -45,9 +48,24 @@ class GeneracionCodigoPrinter(DecafListener):
 
         super().__init__()
 
+    def fill_temps(self):
+        for i in range(5):
+            tmp = f't{self.temp}'
+            self.temp += 1
+            self.pool_temps.append(tmp)
+            # self.pool_temps.reverse()
+
+    def return_temp(self, tmp):
+        var, isTemp = [*tmp]
+        if isTemp:
+            self.pool_temps.append(var)
+
     def newTemp(self):
-        temp = f't{self.temp}'
-        self.temp += 1
+        if len(self.pool_temps) == 0:
+            self.fill_temps()
+
+        self.pool_temps.sort()
+        temp = self.pool_temps.pop(0)
         return temp
 
     def NewLabel(self, flow = ''):
@@ -66,6 +84,7 @@ class GeneracionCodigoPrinter(DecafListener):
             return begin, control, trueWhile, falseWhile
         else: 
             control = f'INST_{self.inst}'
+            self.inst += 1
             return control
 
     def TopGet(self, id, offset_required = None):
@@ -85,7 +104,6 @@ class GeneracionCodigoPrinter(DecafListener):
                 offset = offset_required
             addr = f'G[{offset}]'
             return addr
-
 
     def PopScope(self):
         self.current_scope.ToTable()
@@ -154,7 +172,6 @@ class GeneracionCodigoPrinter(DecafListener):
             size = type_symbol['Size']
             offset = self.current_scope._offset
             self.current_scope.Add(parameter['Tipo'], parameter['Id'], size, offset, True)
-
 
     def exitMethod_declr(self, ctx: DecafParser.Method_declrContext):
         method = ctx.method_name().getText()
@@ -288,13 +305,12 @@ class GeneracionCodigoPrinter(DecafListener):
         self.node_type[ctx] = tipo
         topget = self.TopGet(id)
         codigo = {
-            'addr': topget,
+            'addr': (topget, False),
             'code': []
         }
 
         self.node_code[ctx] = codigo
 
-        
     def enterArray_id(self, ctx: DecafParser.Array_idContext):
         parent = ctx.parentCtx
         if parent in self.node_type.keys():
@@ -320,21 +336,24 @@ class GeneracionCodigoPrinter(DecafListener):
             tipo_var = self.Find(ctx.var_id().getText())
             self.CheckErrorInArrayId(ctx, tipo, tipo_var)
 
+        if isinstance(ctx.parentCtx, DecafParser.Field_varContext):
+            return
+
         temp = self.newTemp()
         temp2 = self.newTemp()
         tipo_real = tipo.split('array')[-1]
         size = self.tabla_tipos.LookUp(tipo_real)['Size']
 
-
-        addr_viejo = self.node_code[ctx.getChild(2)]['addr']
+        addr_viejo = self.node_code[ctx.getChild(2)]['addr'][0]
         code = self.node_code[ctx.getChild(2)]['code'] + \
             [f'{temp} = {size} * {addr_viejo}'] + \
             [f'{temp2} = {temp} + {offset}']
 
-        topget = self.TopGet(id, temp2)
+        self.return_temp(self.node_code[ctx.getChild(2)]['addr'])
+        self.return_temp((temp, True))
         self.node_code[ctx] = {
             'code': code,
-            'addr': topget
+            'addr': (temp2, True)
         }
         
 
@@ -348,7 +367,6 @@ class GeneracionCodigoPrinter(DecafListener):
             elif ctx.array_id() is not None:
                 self.node_type[ctx] = self.node_type[ctx.getChild(0)]
 
-
     def exitVardeclr(self, ctx: DecafParser.VardeclrContext):
         self.node_type[ctx] = self.VOID
 
@@ -356,21 +374,21 @@ class GeneracionCodigoPrinter(DecafListener):
         self.node_type[ctx] = self.STRING
         self.node_code[ctx] = {
             'code': [],
-            'addr': ctx.getText()
+            'addr': (ctx.getText(), False)
         }
 
     def exitInt_literal(self, ctx: DecafParser.Int_literalContext):
         self.node_type[ctx] = self.INT
         self.node_code[ctx] = {
             'code': [],
-            'addr': ctx.getText()
+            'addr': (ctx.getText(), False)
         }
 
     def exitBool_literal(self, ctx: DecafParser.Bool_literalContext):
         self.node_type[ctx] = self.BOOLEAN
         self.node_code[ctx] = {
             'code': [],
-            'addr': ctx.getText()
+            'addr': (ctx.getText(), False)
         }
 
     def exitLiteral(self, ctx: DecafParser.LiteralContext):
@@ -398,7 +416,7 @@ class GeneracionCodigoPrinter(DecafListener):
                 pass
 
         self.node_code[ctx] = {
-            'addr': addr,
+            'addr': (addr, False),
             'code': code
         }
 
@@ -428,28 +446,27 @@ class GeneracionCodigoPrinter(DecafListener):
             self.node_type[ctx] = method_info['Tipo']
             self.node_code[ctx] = {
                 'code': [code],
-                'addr': 'R'
+                'addr': ('R', False)
             }
             return
 
-        hasError = False
         parameter_code = []
         total_code = []
         for i in range(len(parameters)):
-            param = self.node_code[parameters[i]]['addr']
+            param = self.node_code[parameters[i]]['addr'][0]
+            
+            self.return_temp(self.node_code[parameters[i]]['addr'])
+
             total_code += self.node_code[parameters[i]]['code']
             parameter_code += [f'PARAM {param}']
-            tipo_parametro = self.node_type[parameters[i]]
-            tipo_metodo = method_info['Parameters'][i]['Tipo']
 
             self.node_type[ctx] = method_info['Tipo']
 
         code += str(len(parameters))
         self.node_code[ctx] = {
             'code': total_code + parameter_code + [code],
-            'addr': 'R'
+            'addr': ('R', False)
         }
-
 
     def exitStatement_if(self, ctx: DecafParser.Statement_ifContext):
         tipo_if = self.node_type[ctx.expr()]
@@ -478,7 +495,6 @@ class GeneracionCodigoPrinter(DecafListener):
             'next': siguiente
         }
             
-
     def exitStatement_while(self, ctx: DecafParser.Statement_whileContext):
         hijos_tipo = [self.node_type[i] for i in ctx.children if isinstance(i, DecafParser.BlockContext)]
         if len(hijos_tipo) == 1:
@@ -499,24 +515,17 @@ class GeneracionCodigoPrinter(DecafListener):
         self.node_type[ctx] = self.node_type[ctx.expr()]
 
         addr = self.node_code[ctx.expr()]['addr']
-        code = self.node_code[ctx.expr()]['code'] + [f'RETURN {addr}']
+        code = self.node_code[ctx.expr()]['code'] + [f'RETURN {addr[0]}']
+
+        self.return_temp(addr)
+
         self.node_code[ctx] = {
             'code': code
         }
 
-
     def exitStatement_methodcall(self, ctx: DecafParser.Statement_methodcallContext):
         self.node_type[ctx] = self.node_type[ctx.method_call()]
         self.node_code[ctx] = self.node_code[ctx.method_call()]
-        
-
-    # def exitStatement_break(self, ctx: DecafParser.Statement_breakContext):
-    #     error = self.ChildrenHasError(ctx)
-    #     if error:
-    #         self.node_type[ctx] = self.ERROR
-    #         return
-
-    #     self.node_type[ctx] = self.VOID
 
     def exitStatement_assign(self, ctx: DecafParser.Statement_assignContext):
         left = ctx.location()
@@ -531,28 +540,31 @@ class GeneracionCodigoPrinter(DecafListener):
             
             optional = []
             if left in self.node_code.keys():
-                topget = self.node_code[left]['addr']
+                topget = self.node_code[left]['addr'][0]
                 optional = self.node_code[left]['code']
             else:
                 topget = self.TopGet(id)
                 
-            print('E:', E)
-            code = E['code'] + optional + [topget + ' = ' + E['addr']]
+            code = E['code'] + optional + [topget + ' = ' + E['addr'][0]]
+            self.return_temp(E['addr'])
             self.node_code[ctx] = {
                 'code': code,
-                'addr': ''
+                'addr': ('', False)
             }
         elif left.array_id():
             id = left.array_id().ID().getText()
-            topget = self.TopGet(id, self.node_code[left]['addr'])
+            topget = self.TopGet(id, self.node_code[left]['addr'][0])
             addr = E['addr']
             
             code = self.node_code[left]['code'] + E['code'] + \
-                [f'{topget} = {addr}']
+                [f'{topget} = {addr[0]}']
+
+            self.return_temp(self.node_code[left]['addr'])
+            self.return_temp(addr)
                 
             self.node_code[ctx] = {
                 'code': code,
-                'addr': ''
+                'addr': ('', False)
             }   
 
     def enterExpr(self, ctx: DecafParser.ExprContext):
@@ -597,9 +609,10 @@ class GeneracionCodigoPrinter(DecafListener):
             self.node_type[ctx] = self.node_type[non_terminal]
             if ctx.SUB():
                 addr = self.newTemp()
-                code = self.node_code[non_terminal]['code'] + [addr + ' = ' + '-' + self.node_code[non_terminal]['addr']]
+                code = self.node_code[non_terminal]['code'] + [addr + ' = ' + '-' + self.node_code[non_terminal]['addr'][0]]
+                self.return_temp(self.node_code[non_terminal]['addr'])
                 self.node_code[ctx] = {
-                    'addr': addr,
+                    'addr': (addr, True),
                     'code': code
                 }
             elif ctx.NOT():
@@ -619,7 +632,7 @@ class GeneracionCodigoPrinter(DecafListener):
                 me = self.node_code[ctx]
                 
                 code = self.node_code[left]['code'] + self.node_code[right]['code'] + \
-                    ['IF ' + self.node_code[left]['addr'] + f' {ctx.eq_op().getText()} ' + self.node_code[right]['addr'] + ' GOTO ' + me['true']] + \
+                    ['IF ' + self.node_code[left]['addr'][0] + f' {ctx.eq_op().getText()} ' + self.node_code[right]['addr'][0] + ' GOTO ' + me['true']] + \
                     ['GOTO ' + me['false']]
                 false = self.node_code[ctx]['false']
                 true = self.node_code[ctx]['true']
@@ -635,16 +648,19 @@ class GeneracionCodigoPrinter(DecafListener):
                 addr = self.newTemp()
                 code = self.node_code[left]['code'] + \
                     self.node_code[right]['code'] + \
-                    [addr + ' = ' + self.node_code[left]['addr'] + ' ' + ctx.getChild(1).getText() + ' ' + self.node_code[right]['addr']]
+                    [addr + ' = ' + self.node_code[left]['addr'][0] + ' ' + ctx.getChild(1).getText() + ' ' + self.node_code[right]['addr'][0]]
+
+                self.return_temp(self.node_code[left]['addr'])
+                self.return_temp(self.node_code[right]['addr'])
                 self.node_code[ctx] = {
-                    'addr': addr,
+                    'addr': (addr, True),
                     'code': code
                 }
             elif ctx.rel_op() is not None:
                 result_type = self.BOOLEAN
                 me = self.node_code[ctx]
                 code = self.node_code[left]['code'] + self.node_code[right]['code'] + \
-                    ['IF ' + self.node_code[left]['addr'] + f' {ctx.rel_op().getText()} ' + self.node_code[right]['addr'] + ' GOTO ' + me['true']] + \
+                    ['IF ' + self.node_code[left]['addr'][0] + f' {ctx.rel_op().getText()} ' + self.node_code[right]['addr'][0] + ' GOTO ' + me['true']] + \
                     ['GOTO ' + me['false']]
 
                 false = self.node_code[ctx]['false']
@@ -723,7 +739,7 @@ class GeneracionCodigoPrinter(DecafListener):
                 num = child['Offset']
                 total = {
                     'code': [],
-                    'addr': str(num)
+                    'addr': (str(num), False)
                 }
                 self.node_code[location] = total
 
@@ -744,10 +760,11 @@ class GeneracionCodigoPrinter(DecafListener):
             result_type, num = self.IterateChildren(location.var_id().location(), child_type, child_desc)
 
             temp = self.newTemp()
-            code = [temp + ' = ' + str(num['addr']) + ' + ' + str(child['Offset'])]
+            code = [temp + ' = ' + str(num['addr'][0]) + ' + ' + str(child['Offset'])]
+            self.return_temp(num['addr'])
             total = {
                 'code': num['code'] + code,
-                'addr': temp
+                'addr': (temp, True)
             }
             self.node_type[location] = result_type
             self.node_code[location] = total
@@ -791,9 +808,10 @@ class GeneracionCodigoPrinter(DecafListener):
                 code = [f'{temp} = {size} * {addr}']
                 code += [f'{temp2} = {temp} + {offset}']
 
+                self.return_temp((temp, True))
                 total = {
                     'code': code,
-                    'addr': temp2
+                    'addr': (temp2, True)
                 }
                 self.node_code[location] = total
                 return tipo_retorno, total
@@ -839,11 +857,14 @@ class GeneracionCodigoPrinter(DecafListener):
 
             code = [f'{temp} = {size} * {topget_aux}']
             code += [f'{temp2} = {temp} + {offset}']
-            code += [f'{temp3} = {temp2} + {addr}']
+            code += [f'{temp3} = {temp2} + {addr[0]}']
 
+            self.return_temp(addr)
+            self.return_temp((temp, True))
+            self.return_temp((temp2, True))
             total = {
                 'code': num['code'] + code,
-                'addr': temp3
+                'addr': (temp3, True)
             }
             self.node_code[location] = total
 
@@ -874,12 +895,14 @@ class GeneracionCodigoPrinter(DecafListener):
 
                 temp = self.newTemp()
                 offset = symbol['Offset']
-                code = f'{temp} = {offset} + ' + total['addr']
+                code = f'{temp} = {offset} + ' + total['addr'][0]
+
+                self.return_temp(total['addr'])
                 topget = self.TopGet(id, temp)
 
                 self.node_code[ctx] = {
                     'code': total['code'] + [code],
-                    'addr': topget
+                    'addr': (topget, False)
                 }
 
                 print('------------ LOCATION SALIDA -------------------', result_type)
@@ -911,11 +934,14 @@ class GeneracionCodigoPrinter(DecafListener):
                 code += [f'{temp2} = {offset} + {temp}']
 
                 addr = total['addr']
-                code += {f'{temp3} = {temp2} + {addr}'}
+                code += {f'{temp3} = {temp2} + {addr[0]}'}
 
+                self.return_temp(addr)
+                self.return_temp((temp, True))
+                self.return_temp((temp2, True))
                 self.node_code[ctx] = {
                     'code': total['code'] + code,
-                    'addr': temp3
+                    'addr': (temp3, True)
                 }
 
                 print('------------ LOCATION SALIDA -------------------', result_type)
